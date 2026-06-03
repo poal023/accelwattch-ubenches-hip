@@ -1,0 +1,48 @@
+# Compiler definitions
+HIPCC = hipcc
+
+# Baseline flags translated from Accelwattch-ubench suite for MI300X
+HIPCC_FLAGS = -O3 -std=c++14 --offload-arch=gfx942 --gcc-install-dir=/usr/bin/../lib/gcc/x86_64-linux-gnu/13
+
+# Source directories containing the benchmarks
+DIRS = branching_benchmarks functional_benchmarks
+
+# Define the output directory (defaults to "bin" if not specified)
+BIN_DIR ?= bin
+
+# Find all .hip files dynamically across all specified directories
+HIP_SRCS = $(shell find $(DIRS) -type f -name "*.hip" 2>/dev/null)
+
+# Tell Make to search the directories containing the .hip files
+# $(dir ...) extracts just the folder paths, $(sort ...) removes duplicates
+vpath %.hip $(sort $(dir $(HIP_SRCS)))
+
+# Define the target executables inside the BIN_DIR
+# 1. $(notdir ...) removes the original path (e.g., dir/bench/bench.hip -> bench.hip)
+# 2. $(patsubst ...) prefixes it with the bin directory and strips .hip (-> bin/bench)
+EXECS = $(patsubst %.hip, $(BIN_DIR)/%, $(notdir $(HIP_SRCS)))
+
+# Default target builds all executables
+all: $(EXECS)
+
+# Rule to create the bin directory if it doesn't exist
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
+
+# Rule to build each executable from its corresponding .hip file
+# The '| $(BIN_DIR)' is an order-only prerequisite so it doesn't rebuild if the folder timestamp changes
+$(BIN_DIR)/%: %.hip | $(BIN_DIR)
+	@echo "Compiling $< for gfx942..."
+	$(HIPCC) $(HIPCC_FLAGS) $< -o $@
+
+# Clean up the bin directory
+clean:
+	@echo "Cleaning executables..."
+	rm -rf $(BIN_DIR)
+
+# Clean executables AND generated .hip files
+deep-clean: clean
+	@echo "Cleaning generated .hip files..."
+	rm -f $(HIP_SRCS)
+
+.PHONY: all clean deep-clean
